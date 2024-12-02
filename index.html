@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>VPN Gate 服务器列表</title>
     <style>
         * {
@@ -23,12 +26,31 @@
             margin: 0 auto;
         }
 
+        .header {
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .filter-input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
         .stats {
             background: white;
             padding: 15px;
             border-radius: 8px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         .server-grid {
@@ -39,53 +61,326 @@
 
         .server-card {
             background: white;
-            padding: 15px;
+            padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .server-info {
+            margin-bottom: 15px;
+        }
+
+        .server-info p {
+            margin: 8px 0;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .test-btn, .download-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        .test-btn {
+            background: #4CAF50;
+        }
+
+        .download-btn {
+            background: #2196F3;
+        }
+
+        .test-btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .download-btn:hover {
+            background: #1976D2;
+        }
+
+        .test-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .test-result {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .test-pending {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .test-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .test-failed {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: white;
+            background: #4CAF50;
+        }
+
+        .btn:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+            }
+
+            .filter-input {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>VPN Gate 服务器列表</h1>
-        
+        <div class="header">
+            <h1>VPN Gate 服务器列表</h1>
+        </div>
+
         <div class="stats">
             <p>总节点数：<span id="totalServers">0</span></p>
             <p>测试成功：<span id="successfulTests">0</span></p>
             <p>成功率：<span id="successRate">0%</span></p>
         </div>
 
+        <div class="btn-group">
+            <button id="testAllBtn" class="btn">测试所有节点</button>
+            <button id="showTestedBtn" class="btn">仅显示测试成功的节点</button>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="countryFilter" class="filter-input" placeholder="按国家筛选">
+        </div>
+
         <div id="serverGrid" class="server-grid"></div>
     </div>
 
     <script>
-        // 基础数据加载和显示
+        let servers = [];
+        let testedServers = new Map();
+        let showOnlyTested = false;
+        let isTesting = false;
+
+        // 加载服务器数据
         fetch('./vpn_data.json')
             .then(response => response.json())
             .then(data => {
-                const totalServers = data.servers.length;
-                document.getElementById('totalServers').textContent = totalServers;
-                
-                // 显示服务器列表
-                const grid = document.getElementById('serverGrid');
-                data.servers.forEach(server => {
-                    const speed = (parseInt(server.speed) / 1024 / 1024).toFixed(2);
-                    const card = document.createElement('div');
-                    card.className = 'server-card';
-                    card.innerHTML = `
-                        <h3>${server.countryLong}</h3>
-                        <p>IP: ${server.ip}</p>
-                        <p>速度: ${speed} Mbps</p>
-                        <p>Ping: ${server.ping} ms</p>
-                        <p>在线用户: ${server.numVpnSessions}</p>
-                    `;
-                    grid.appendChild(card);
-                });
+                servers = data.servers;
+                document.getElementById('totalServers').textContent = servers.length;
+                displayServers(servers);
             })
             .catch(error => {
                 console.error('加载失败:', error);
                 alert('加载服务器列表失败: ' + error.message);
             });
+
+        // 事件监听器
+        document.getElementById('testAllBtn').addEventListener('click', testAllServers);
+        document.getElementById('showTestedBtn').addEventListener('click', toggleTestedOnly);
+        document.getElementById('countryFilter').addEventListener('input', filterServers);
+
+        // 测试单个服务器
+        async function testServer(ip, cardElement) {
+            const testBtn = cardElement.querySelector('.test-btn');
+            const resultDiv = cardElement.querySelector('.test-result');
+            testBtn.disabled = true;
+            resultDiv.textContent = '测试中...';
+            resultDiv.className = 'test-result test-pending';
+
+            try {
+                const startTime = performance.now();
+                await Promise.any([
+                    fetch('https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js', { mode: 'no-cors' }),
+                    fetch('https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js', { mode: 'no-cors' })
+                ]);
+                const endTime = performance.now();
+                const latency = Math.round(endTime - startTime);
+
+                testedServers.set(ip, { status: 'success', latency });
+                resultDiv.textContent = `测试成功! 延迟: ${latency}ms`;
+                resultDiv.className = 'test-result test-success';
+
+                updateStats();
+                if (showOnlyTested) filterServers();
+            } catch (error) {
+                testedServers.set(ip, { status: 'failed' });
+                resultDiv.textContent = '测试失败';
+                resultDiv.className = 'test-result test-failed';
+            } finally {
+                testBtn.disabled = false;
+            }
+        }
+
+        // 测试所有服务器
+        async function testAllServers() {
+            if (isTesting) return;
+
+            isTesting = true;
+            const testAllBtn = document.getElementById('testAllBtn');
+            testAllBtn.disabled = true;
+            testAllBtn.textContent = '测试中...';
+
+            const cards = document.querySelectorAll('.server-card');
+            for (const card of cards) {
+                if (isTesting) {
+                    const ip = card.getAttribute('data-ip');
+                    if (!testedServers.has(ip) || 
+                        testedServers.get(ip).status === 'failed') {
+                        await testServer(ip, card);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+            }
+
+            isTesting = false;
+            testAllBtn.disabled = false;
+            testAllBtn.textContent = '测试所有节点';
+        }
+
+        // 切换显示模式
+        function toggleTestedOnly() {
+            const btn = document.getElementById('showTestedBtn');
+            showOnlyTested = !showOnlyTested;
+            btn.textContent = showOnlyTested ? '显示所有节点' : '仅显示测试成功的节点';
+            filterServers();
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            const totalTested = testedServers.size;
+            const successfulTests = Array.from(testedServers.values())
+                .filter(result => result.status === 'success').length;
+            
+            document.getElementById('successfulTests').textContent = successfulTests;
+            document.getElementById('successRate').textContent = 
+                totalTested ? `${Math.round(successfulTests / totalTested * 100)}%` : '0%';
+        }
+
+        // 过滤服务器
+        function filterServers() {
+            const countryFilter = document.getElementById('countryFilter').value.toLowerCase();
+            let filteredServers = servers;
+
+            if (countryFilter) {
+                filteredServers = filteredServers.filter(server => 
+                    server.countryLong.toLowerCase().includes(countryFilter)
+                );
+            }
+
+            if (showOnlyTested) {
+                filteredServers = filteredServers.filter(server => 
+                    testedServers.has(server.ip) && 
+                    testedServers.get(server.ip).status === 'success'
+                );
+            }
+
+            displayServers(filteredServers);
+        }
+
+        // 显示服务器列表
+        function displayServers(servers) {
+            const grid = document.getElementById('serverGrid');
+            grid.innerHTML = '';
+
+            if (servers.length === 0) {
+                grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">没有找到符合条件的节点</p>';
+                return;
+            }
+
+            servers.forEach(server => {
+                const speed = (parseInt(server.speed) / 1024 / 1024).toFixed(2);
+                const card = document.createElement('div');
+                card.className = 'server-card';
+                card.setAttribute('data-ip', server.ip);
+
+                const testResult = testedServers.get(server.ip);
+                const testResultHtml = testResult ? `
+                    <div class="test-result ${testResult.status === 'success' ? 'test-success' : 'test-failed'}">
+                        ${testResult.status === 'success' ? 
+                            `测试成功! 延迟: ${testResult.latency}ms` : 
+                            '测试失败'}
+                    </div>
+                ` : '';
+
+                card.innerHTML = `
+                    <div class="server-info">
+                        <h3>${server.countryLong}</h3>
+                        <p>IP: ${server.ip}</p>
+                        <p>速度: ${speed} Mbps</p>
+                        <p>Ping: ${server.ping} ms</p>
+                        <p>在线用户: ${server.numVpnSessions}</p>
+                    </div>
+                    ${testResultHtml}
+                    <button class="test-btn" onclick="testServer('${server.ip}', this.parentElement)">
+                        测试连接
+                    </button>
+                    <button class="download-btn" onclick="downloadConfig('${server.ip}', '${encodeURIComponent(server.configData)}')">
+                        下载配置文件
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // 下载配置文件
+        function downloadConfig(ip, configData) {
+            try {
+                const decodedConfigData = decodeURIComponent(configData);
+                const base64Content = decodedConfigData.replace(/[\r\n]/g, '');
+                const config = atob(base64Content);
+                
+                const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `vpngate_${ip}.ovpn`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('下载配置文件失败:', error);
+                alert('下载配置文件失败，请重试');
+            }
+        }
     </script>
 </body>
 </html>
