@@ -34,9 +34,9 @@
         }
 
         .controls {
-            margin-bottom: 20px;
             display: flex;
             gap: 10px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
         }
 
@@ -45,6 +45,7 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
+            min-width: 200px;
         }
 
         .server-grid {
@@ -60,19 +61,40 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
+        .server-card h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .server-info {
+            margin-bottom: 15px;
+        }
+
+        .server-info p {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
         .download-btn {
             background: #2196F3;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 10px 16px;
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
+            font-size: 14px;
+            transition: background-color 0.3s;
         }
 
         .download-btn:hover {
             background: #1976D2;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
         }
 
         @media (max-width: 600px) {
@@ -92,7 +114,7 @@
             <h1>VPN Gate 服务器列表</h1>
         </div>
 
-        <div class="status" id="updateTime"></div>
+        <div id="updateTime" class="status"></div>
 
         <div class="controls">
             <input type="text" id="countryFilter" placeholder="按国家筛选" class="filter-input">
@@ -104,6 +126,7 @@
             </select>
         </div>
 
+        <div id="loading" class="loading" style="display: none;">加载中...</div>
         <div id="serverGrid" class="server-grid"></div>
     </div>
 
@@ -120,14 +143,18 @@
                 document.getElementById('sortBy').addEventListener('change', () => this.filterAndSortServers());
             }
 
+            showLoading(show) {
+                document.getElementById('loading').style.display = show ? 'block' : 'none';
+            }
+
             async loadData() {
                 try {
+                    this.showLoading(true);
                     const response = await fetch('vpn_data.json');
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
                     this.servers = data.servers;
                     
-                    // 显示更新时间
                     const updateTime = new Date(data.timestamp * 1000);
                     document.getElementById('updateTime').textContent = 
                         `上次更新时间: ${updateTime.toLocaleString()}`;
@@ -135,6 +162,9 @@
                     this.filterAndSortServers();
                 } catch (error) {
                     console.error('Error loading data:', error);
+                    alert('加载服务器数据失败，请刷新页面重试');
+                } finally {
+                    this.showLoading(false);
                 }
             }
 
@@ -179,7 +209,7 @@
                             <p>在线用户: ${server.numVpnSessions}</p>
                             <p>总用户: ${server.totalUsers}</p>
                         </div>
-                        <button class="download-btn" onclick="vpnUI.downloadConfig('${server.ip}', '${server.configData}')">
+                        <button class="download-btn" onclick="vpnUI.downloadConfig('${server.ip}', '${encodeURIComponent(server.configData)}')">
                             下载配置文件
                         </button>
                     `;
@@ -188,19 +218,30 @@
             }
 
             downloadConfig(ip, configData) {
-                const config = atob(configData);
-                const blob = new Blob([config], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `vpngate_${ip}.ovpn`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                try {
+                    const decodedConfigData = decodeURIComponent(configData);
+                    const base64Content = decodedConfigData.replace(/[\r\n]/g, '');
+                    const config = atob(base64Content);
+                    
+                    const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `vpngate_${ip}.ovpn`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    console.log('配置文件下载成功');
+                } catch (error) {
+                    console.error('下载配置文件时出错:', error);
+                    alert('下载配置文件时出错，请稍后重试');
+                }
             }
         }
 
+        // 初始化应用
         const vpnUI = new VPNGateUI();
     </script>
 </body>
