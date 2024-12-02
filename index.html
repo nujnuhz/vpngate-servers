@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>VPN Gate 服务器列表</title>
     <style>
         * {
@@ -27,12 +30,6 @@
             margin-bottom: 20px;
         }
 
-        .status {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-
         .controls {
             display: flex;
             gap: 10px;
@@ -48,11 +45,6 @@
             font-size: 14px;
             transition: all 0.3s;
             color: white;
-        }
-
-        .btn:disabled {
-            background: #cccccc !important;
-            cursor: not-allowed;
         }
 
         .test-all-btn {
@@ -90,11 +82,6 @@
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-
-        .server-card:hover {
-            transform: translateY(-2px);
         }
 
         .server-info {
@@ -108,7 +95,7 @@
             justify-content: space-between;
         }
 
-        .download-btn, .test-btn {
+        .test-btn, .download-btn {
             width: 100%;
             padding: 10px;
             border: none;
@@ -120,20 +107,25 @@
             transition: background-color 0.3s;
         }
 
+        .test-btn {
+            background: #4CAF50;
+        }
+
         .download-btn {
             background: #2196F3;
+        }
+
+        .test-btn:hover:not(:disabled) {
+            background: #45a049;
         }
 
         .download-btn:hover:not(:disabled) {
             background: #1976D2;
         }
 
-        .test-btn {
-            background: #4CAF50;
-        }
-
-        .test-btn:hover:not(:disabled) {
-            background: #45a049;
+        .btn:disabled, .test-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
         }
 
         .test-result {
@@ -189,7 +181,7 @@
     <div class="container">
         <div class="header">
             <h1>VPN Gate 服务器列表</h1>
-            <div id="updateTime" class="status"></div>
+            <div id="updateTime"></div>
         </div>
 
         <div class="stats">
@@ -210,6 +202,19 @@
     </div>
 
     <script>
+        // 直接进行初始数据加载测试
+        fetch('vpn_data.json')
+            .then(response => response.text())
+            .then(text => {
+                try {
+                    const data = JSON.parse(text);
+                    console.log('Initial data load:', data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            })
+            .catch(error => console.error('Fetch error:', error));
+
         class VPNGateUI {
             constructor() {
                 this.servers = [];
@@ -231,53 +236,38 @@
             }
 
             async loadData() {
-    try {
-        this.showLoading(true);
-        console.log('开始加载数据...');
-        
-        const response = await fetch(`vpn_data.json?t=${Date.now()}`, {
-            headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            },
-            cache: 'no-store'
-        });
-        
-        console.log('Response status:', response.status);
-        const text = await response.text(); // 先获取原始文本
-        console.log('Raw response:', text); // 打印原始响应
-        
-        let data;
-        try {
-            data = JSON.parse(text);
-            console.log('Parsed data:', data);
-        } catch (e) {
-            console.error('JSON parse error:', e);
-            throw new Error('JSON 解析失败');
-        }
-        
-        if (!data || !Array.isArray(data.servers)) {
-            console.error('Invalid data structure:', data);
-            throw new Error('数据格式不正确');
-        }
-        
-        this.servers = data.servers;
-        console.log('Servers count:', this.servers.length);
-        
-        document.getElementById('totalServers').textContent = this.servers.length;
-        
-        const updateTime = new Date(data.timestamp * 1000);
-        document.getElementById('updateTime').textContent = 
-            `更新时间: ${updateTime.toLocaleString()}`;
-        
-        this.filterServers();
-    } catch (error) {
-        console.error('Error loading data:', error);
-        alert('加载服务器列表失败：' + error.message);
-    } finally {
-        this.showLoading(false);
-    }
-}
+                try {
+                    this.showLoading(true);
+                    const timestamp = Date.now();
+                    const response = await fetch(`vpn_data.json?t=${timestamp}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const text = await response.text();
+                    console.log('Loaded data:', text.substring(0, 200));
+                    
+                    const data = JSON.parse(text);
+                    if (!data || !Array.isArray(data.servers)) {
+                        throw new Error('Invalid data structure');
+                    }
+                    
+                    this.servers = data.servers;
+                    document.getElementById('totalServers').textContent = this.servers.length;
+                    
+                    const updateTime = new Date(data.timestamp * 1000);
+                    document.getElementById('updateTime').textContent = 
+                        `更新时间: ${updateTime.toLocaleString()}`;
+                    
+                    this.filterServers();
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    alert('加载服务器列表失败: ' + error.message);
+                } finally {
+                    this.showLoading(false);
+                }
+            }
 
             async testServer(ip, cardElement) {
                 const testResultElement = cardElement.querySelector('.test-result');
@@ -297,8 +287,7 @@
                     const testPromises = testUrls.map(url => 
                         fetch(url, { 
                             mode: 'no-cors',
-                            cache: 'no-store',
-                            timeout: 5000
+                            cache: 'no-store'
                         })
                     );
 
@@ -318,7 +307,6 @@
                     this.updateStats();
                     if (this.showOnlyTested) this.filterServers();
                 } catch (error) {
-                    console.error('Test failed:', error);
                     this.testedServers.set(ip, {
                         status: 'failed',
                         error: error.message,
@@ -346,7 +334,6 @@
                         if (!this.testedServers.has(ip) || 
                             this.testedServers.get(ip).status === 'failed') {
                             await this.testServer(ip, card);
-                            // 添加延迟避免请求过快
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     }
@@ -415,7 +402,6 @@
                             ${testResult.status === 'success' ? 
                                 `测试成功! 延迟: ${testResult.latency}ms` : 
                                 '测试失败'}
-                            <div class="test-info">测试时间: ${new Date(testResult.testedAt).toLocaleString()}</div>
                         </div>
                     ` : '';
 
@@ -445,8 +431,4 @@
                     const base64Content = decodedConfigData.replace(/[\r\n]/g, '');
                     const config = atob(base64Content);
                     
-                    const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `vp
+                    const blob = new Blob([config], { type: 'text/plain;
