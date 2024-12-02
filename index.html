@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VPN Gate 服务器列表 - 智能筛选</title>
+    <title>VPN Gate 服务器列表 - 连接测试</title>
     <style>
         * {
             box-sizing: border-box;
@@ -79,19 +79,14 @@
             border: 2px solid #FF9800;
         }
 
-        .server-card h3 {
-            margin-bottom: 15px;
-            color: #333;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
         .quality-badge {
             font-size: 12px;
             padding: 2px 6px;
             border-radius: 4px;
             color: white;
+            position: absolute;
+            top: 10px;
+            right: 10px;
         }
 
         .quality-recommended {
@@ -107,7 +102,7 @@
         }
 
         .server-info {
-            margin-bottom: 15px;
+            margin: 15px 0;
         }
 
         .server-info p {
@@ -117,20 +112,38 @@
             justify-content: space-between;
         }
 
-        .download-btn {
-            background: #2196F3;
-            color: white;
+        .btn {
             border: none;
             padding: 10px 16px;
             border-radius: 4px;
             cursor: pointer;
-            width: 100%;
             font-size: 14px;
-            transition: background-color 0.3s;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .download-btn {
+            background: #2196F3;
+            color: white;
         }
 
         .download-btn:hover {
             background: #1976D2;
+        }
+
+        .test-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .test-btn:hover {
+            background: #45a049;
+        }
+
+        .test-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
         }
 
         .loading {
@@ -147,9 +160,34 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .stats p {
-            margin: 5px 0;
+        .criteria {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .test-result {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
             font-size: 14px;
+            text-align: center;
+        }
+
+        .test-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .test-failed {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .test-pending {
+            background: #fff3e0;
+            color: #ef6c00;
         }
 
         @media (max-width: 600px) {
@@ -171,20 +209,32 @@
 
         <div id="updateTime" class="status"></div>
 
+        <div class="criteria">
+            <h4>筛选标准</h4>
+            <ul>
+                <li>推荐节点：速度 >100Mbps，延迟 <50ms，评分 >100万，在线用户 >10，运行时间 >30天</li>
+                <li>高速节点：速度 >80Mbps</li>
+                <li>低延迟节点：延迟 <30ms</li>
+                <li>测试说明：仅测试 TCP 443 端口连通性，不代表 VPN 一定可用</li>
+            </ul>
+        </div>
+
         <div class="stats" id="statsPanel">
             <h3>节点统计</h3>
             <p>总节点数: <span id="totalServers">0</span></p>
             <p>推荐节点: <span id="recommendedServers">0</span></p>
             <p>高速节点: <span id="highSpeedServers">0</span></p>
             <p>低延迟节点: <span id="lowPingServers">0</span></p>
+            <p>测试成功: <span id="testedServers">0</span></p>
         </div>
 
         <div class="controls">
             <select id="filterQuality" class="sort-select">
                 <option value="all">显示所有节点</option>
-                <option value="recommended" selected>推荐节点</option>
-                <option value="highSpeed">高速节点 (>50Mbps)</option>
-                <option value="lowPing">低延迟 (<50ms)</option>
+                <option value="tested">仅显示测试成功的节点</option>
+                <option value="recommended" selected>仅显示推荐节点</option>
+                <option value="highSpeed">仅显示高速节点</option>
+                <option value="lowPing">仅显示低延迟节点</option>
             </select>
             <input type="text" id="countryFilter" placeholder="按国家筛选" class="filter-input">
             <select id="sortBy" class="sort-select">
@@ -192,7 +242,7 @@
                 <option value="speed">按速度排序</option>
                 <option value="ping">按延迟排序</option>
                 <option value="score">按得分排序</option>
-                <option value="sessions">按用户数排序</option>
+                <option value="uptime">按运行时间排序</option>
             </select>
         </div>
 
@@ -204,6 +254,7 @@
         class VPNGateUI {
             constructor() {
                 this.servers = [];
+                this.testedServers = new Map();
                 this.setupEventListeners();
                 this.loadData();
             }
@@ -219,28 +270,86 @@
             }
 
             calculateQualityScore(server) {
-                const speedScore = parseInt(server.speed) / (100 * 1024 * 1024); // 速度权重
-                const pingScore = Math.max(0, 1 - parseInt(server.ping) / 1000); // ping权重
-                const sessionScore = parseInt(server.numVpnSessions) / 100; // 用户数权重
-                const uptimeScore = parseInt(server.uptime) / (30 * 24 * 3600); // 在线时间权重
-                
-                return (speedScore * 0.4 + pingScore * 0.3 + sessionScore * 0.2 + uptimeScore * 0.1) * 100;
+                const speed = parseInt(server.speed) / (1024 * 1024);
+                const ping = parseInt(server.ping);
+                const sessions = parseInt(server.numVpnSessions);
+                const uptime = parseInt(server.uptime) / (24 * 3600);
+
+                let score = 0;
+                score += Math.min(40, speed / 100 * 40);
+                score += Math.min(30, (1 - ping / 100) * 30);
+                score += Math.min(20, sessions / 20 * 20);
+                score += Math.min(10, uptime / 30 * 10);
+
+                return score;
             }
 
             getServerQuality(server) {
-                const speed = parseInt(server.speed) / (1024 * 1024); // Convert to Mbps
+                const speed = parseInt(server.speed) / (1024 * 1024);
                 const ping = parseInt(server.ping);
                 const score = parseInt(server.score);
                 const sessions = parseInt(server.numVpnSessions);
+                const uptime = parseInt(server.uptime) / (24 * 3600);
 
-                if (speed > 50 && ping < 100 && score > 500000 && sessions > 5) {
+                if (speed > 100 && ping < 50 && score > 1000000 && sessions > 10 && uptime > 30) {
                     return 'recommended';
-                } else if (speed > 50) {
+                } else if (speed > 80) {
                     return 'high-speed';
-                } else if (ping < 50) {
+                } else if (ping < 30) {
                     return 'low-ping';
                 }
                 return 'normal';
+            }
+
+            async testServer(ip, cardElement) {
+                if (this.testedServers.has(ip)) {
+                    return this.testedServers.get(ip);
+                }
+
+                const testResultElement = cardElement.querySelector('.test-result');
+                const testButton = cardElement.querySelector('.test-btn');
+                testButton.disabled = true;
+                testResultElement.textContent = '测试中...';
+                testResultElement.className = 'test-result test-pending';
+
+                try {
+                    const startTime = performance.now();
+                    const response = await Promise.race([
+                        fetch(`https://${ip}:443`, { mode: 'no-cors' }),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Timeout')), 5000)
+                        )
+                    ]);
+                    const endTime = performance.now();
+                    const result = {
+                        status: 'success',
+                        latency: Math.round(endTime - startTime)
+                    };
+                    this.testedServers.set(ip, result);
+                    
+                    testResultElement.textContent = `测试成功! 延迟: ${result.latency}ms`;
+                    testResultElement.className = 'test-result test-success';
+                    this.updateTestedCount();
+                    return result;
+                } catch (error) {
+                    const result = {
+                        status: 'failed',
+                        error: error.message
+                    };
+                    this.testedServers.set(ip, result);
+                    
+                    testResultElement.textContent = '测试失败';
+                    testResultElement.className = 'test-result test-failed';
+                    return result;
+                } finally {
+                    testButton.disabled = false;
+                }
+            }
+
+            updateTestedCount() {
+                const successfulTests = Array.from(this.testedServers.values())
+                    .filter(result => result.status === 'success').length;
+                document.getElementById('testedServers').textContent = successfulTests;
             }
 
             async loadData() {
@@ -250,7 +359,6 @@
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
                     
-                    // 添加质量评分
                     this.servers = data.servers.map(server => ({
                         ...server,
                         qualityScore: this.calculateQualityScore(server),
@@ -279,6 +387,7 @@
                     this.servers.filter(s => s.quality === 'high-speed').length;
                 document.getElementById('lowPingServers').textContent = 
                     this.servers.filter(s => s.quality === 'low-ping').length;
+                this.updateTestedCount();
             }
 
             filterAndSortServers() {
@@ -288,108 +397,37 @@
 
                 let filteredServers = this.servers;
 
-                // 质量筛选
                 if (qualityFilter !== 'all') {
                     filteredServers = filteredServers.filter(server => {
                         switch (qualityFilter) {
+                            case 'tested':
+                                return this.testedServers.has(server.ip) && 
+                                       this.testedServers.get(server.ip).status === 'success';
                             case 'recommended':
                                 return server.quality === 'recommended';
                             case 'highSpeed':
-                                return parseInt(server.speed) > 50 * 1024 * 1024;
+                                return parseInt(server.speed) > 80 * 1024 * 1024;
                             case 'lowPing':
-                                return parseInt(server.ping) < 50;
+                                return parseInt(server.ping) < 30;
                             default:
                                 return true;
                         }
                     });
                 }
 
-                // 国家筛选
                 if (countryFilter) {
                     filteredServers = filteredServers.filter(server => 
                         server.countryLong.toLowerCase().includes(countryFilter)
                     );
                 }
 
-                // 排序
                 const sortFunctions = {
                     quality: (a, b) => b.qualityScore - a.qualityScore,
                     speed: (a, b) => parseInt(b.speed) - parseInt(a.speed),
                     ping: (a, b) => parseInt(a.ping) - parseInt(b.ping),
                     score: (a, b) => parseInt(b.score) - parseInt(a.score),
-                    sessions: (a, b) => parseInt(b.numVpnSessions) - parseInt(a.numVpnSessions)
+                    uptime: (a, b) => parseInt(b.uptime) - parseInt(a.uptime)
                 };
 
                 filteredServers.sort(sortFunctions[sortBy]);
-                this.displayServers(filteredServers);
-            }
-
-            displayServers(servers) {
-                const grid = document.getElementById('serverGrid');
-                grid.innerHTML = '';
-
-                servers.forEach(server => {
-                    const speed = (parseInt(server.speed) / 1024 / 1024).toFixed(2);
-                    const card = document.createElement('div');
-                    card.className = `server-card ${server.quality}`;
-                    
-                    let qualityBadge = '';
-                    if (server.quality === 'recommended') {
-                        qualityBadge = '<span class="quality-badge quality-recommended">推荐</span>';
-                    } else if (server.quality === 'high-speed') {
-                        qualityBadge = '<span class="quality-badge quality-high-speed">高速</span>';
-                    } else if (server.quality === 'low-ping') {
-                        qualityBadge = '<span class="quality-badge quality-low-ping">低延迟</span>';
-                    }
-
-                    card.innerHTML = `
-                        <h3>
-                            ${server.countryLong}
-                            ${qualityBadge}
-                        </h3>
-                        <div class="server-info">
-                            <p>IP: ${server.ip}</p>
-                            <p>速度: ${speed} Mbps</p>
-                            <p>Ping: ${server.ping} ms</p>
-                            <p>得分: ${server.score}</p>
-                            <p>在线用户: ${server.numVpnSessions}</p>
-                            <p>总用户: ${server.totalUsers}</p>
-                            <p>质量评分: ${server.qualityScore.toFixed(1)}</p>
-                        </div>
-                        <button class="download-btn" onclick="vpnUI.downloadConfig('${server.ip}', '${encodeURIComponent(server.configData)}')">
-                            下载配置文件
-                        </button>
-                    `;
-                    grid.appendChild(card);
-                });
-            }
-
-            downloadConfig(ip, configData) {
-                try {
-                    const decodedConfigData = decodeURIComponent(configData);
-                    const base64Content = decodedConfigData.replace(/[\r\n]/g, '');
-                    const config = atob(base64Content);
-                    
-                    const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `vpngate_${ip}.ovpn`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    
-                    console.log('配置文件下载成功');
-                } catch (error) {
-                    console.error('下载配置文件时出错:', error);
-                    alert('下载配置文件时出错，请稍后重试');
-                }
-            }
-        }
-
-        // 初始化应用
-        const vpnUI = new VPNGateUI();
-    </script>
-</body>
-</html>
+                this.displayServers(filteredSer
