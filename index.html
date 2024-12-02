@@ -97,17 +97,9 @@
             transform: translateY(-2px);
         }
 
-        .server-card h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
         .server-info {
             font-size: 14px;
+            margin-bottom: 15px;
         }
 
         .server-info p {
@@ -132,7 +124,7 @@
             background: #2196F3;
         }
 
-        .download-btn:hover {
+        .download-btn:hover:not(:disabled) {
             background: #1976D2;
         }
 
@@ -175,18 +167,11 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .stats p {
-            margin: 5px 0;
-            font-size: 14px;
-            display: flex;
-            justify-content: space-between;
-            max-width: 300px;
-        }
-
-        .test-info {
-            font-size: 12px;
+        .loading {
+            text-align: center;
+            padding: 20px;
             color: #666;
-            margin-top: 5px;
+            display: none;
         }
 
         @media (max-width: 600px) {
@@ -220,6 +205,7 @@
             <input type="text" id="countryFilter" class="filter-input" placeholder="按国家筛选">
         </div>
 
+        <div id="loading" class="loading">加载中...</div>
         <div id="serverGrid" class="server-grid"></div>
     </div>
 
@@ -240,21 +226,42 @@
                 document.getElementById('countryFilter').addEventListener('input', () => this.filterServers());
             }
 
+            showLoading(show) {
+                document.getElementById('loading').style.display = show ? 'block' : 'none';
+            }
+
             async loadData() {
                 try {
-                    const response = await fetch('vpn_data.json');
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
+                    this.showLoading(true);
+                    console.log('开始加载数据...');
                     
-                    this.servers = data.servers;
-                    document.getElementById('updateTime').textContent = 
-                        `更新时间: ${new Date(data.timestamp * 1000).toLocaleString()}`;
+                    const response = await fetch(`vpn_data.json?t=${Date.now()}`, {
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        },
+                        cache: 'no-store'
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const data = await response.json();
+                    console.log('加载的数据:', data);
+                    
+                    this.servers = data.servers || [];
                     document.getElementById('totalServers').textContent = this.servers.length;
+                    
+                    const updateTime = new Date(data.timestamp * 1000);
+                    document.getElementById('updateTime').textContent = 
+                        `更新时间: ${updateTime.toLocaleString()}`;
                     
                     this.filterServers();
                 } catch (error) {
                     console.error('Error loading data:', error);
-                    alert('加载服务器列表失败，请刷新页面重试');
+                    alert('加载服务器列表失败：' + error.message);
+                } finally {
+                    this.showLoading(false);
                 }
             }
 
@@ -276,6 +283,7 @@
                     const testPromises = testUrls.map(url => 
                         fetch(url, { 
                             mode: 'no-cors',
+                            cache: 'no-store',
                             timeout: 5000
                         })
                     );
@@ -283,28 +291,27 @@
                     await Promise.any(testPromises);
                     const endTime = performance.now();
                     const latency = Math.round(endTime - startTime);
-
+                    
                     this.testedServers.set(ip, {
                         status: 'success',
                         latency,
                         testedAt: new Date().toISOString()
                     });
 
-                    testResultElement.textContent = `连接成功! 延迟: ${latency}ms`;
+                    testResultElement.textContent = `测试成功! 延迟: ${latency}ms`;
                     testResultElement.className = 'test-result test-success';
-                    testResultElement.innerHTML += `<div class="test-info">测试时间: ${new Date().toLocaleString()}</div>`;
-
+                    
                     this.updateStats();
                     if (this.showOnlyTested) this.filterServers();
                 } catch (error) {
+                    console.error('Test failed:', error);
                     this.testedServers.set(ip, {
                         status: 'failed',
                         error: error.message,
                         testedAt: new Date().toISOString()
                     });
-                    testResultElement.textContent = '连接失败';
+                    testResultElement.textContent = '测试失败';
                     testResultElement.className = 'test-result test-failed';
-                    testResultElement.innerHTML += `<div class="test-info">测试时间: ${new Date().toLocaleString()}</div>`;
                 } finally {
                     testButton.disabled = false;
                 }
@@ -325,7 +332,7 @@
                         if (!this.testedServers.has(ip) || 
                             this.testedServers.get(ip).status === 'failed') {
                             await this.testServer(ip, card);
-                            // 添加小延迟避免请求过快
+                            // 添加延迟避免请求过快
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     }
@@ -392,20 +399,16 @@
                     const testResultHtml = testResult ? `
                         <div class="test-result ${testResult.status === 'success' ? 'test-success' : 'test-failed'}">
                             ${testResult.status === 'success' ? 
-                                `连接成功! 延迟: ${testResult.latency}ms` : 
-                                '连接失败'}
+                                `测试成功! 延迟: ${testResult.latency}ms` : 
+                                '测试失败'}
                             <div class="test-info">测试时间: ${new Date(testResult.testedAt).toLocaleString()}</div>
                         </div>
                     ` : '';
 
                     card.innerHTML = `
-                        <h3>
-                            ${server.countryLong}
-                            <span style="color: ${testResult?.status === 'success' ? '#4CAF50' : '#666'}">
-                                ${server.ip}
-                            </span>
-                        </h3>
                         <div class="server-info">
+                            <h3>${server.countryLong}</h3>
+                            <p>IP: ${server.ip}</p>
                             <p>速度: ${speed} Mbps</p>
                             <p>Ping: ${server.ping} ms</p>
                             <p>在线用户: ${server.numVpnSessions}</p>
@@ -431,3 +434,5 @@
                     const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `vp
