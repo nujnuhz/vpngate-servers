@@ -236,38 +236,49 @@
             }
 
             async loadData() {
-                try {
-                    this.showLoading(true);
-                    const timestamp = Date.now();
-                    const response = await fetch(`vpn_data.json?t=${timestamp}`);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const text = await response.text();
-                    console.log('Loaded data:', text.substring(0, 200));
-                    
-                    const data = JSON.parse(text);
-                    if (!data || !Array.isArray(data.servers)) {
-                        throw new Error('Invalid data structure');
-                    }
-                    
-                    this.servers = data.servers;
-                    document.getElementById('totalServers').textContent = this.servers.length;
-                    
-                    const updateTime = new Date(data.timestamp * 1000);
-                    document.getElementById('updateTime').textContent = 
-                        `更新时间: ${updateTime.toLocaleString()}`;
-                    
-                    this.filterServers();
-                } catch (error) {
-                    console.error('Error loading data:', error);
-                    alert('加载服务器列表失败: ' + error.message);
-                } finally {
-                    this.showLoading(false);
-                }
-            }
+    try {
+        this.showLoading(true);
+        console.log('开始加载数据...');
+        
+        // 修改为相对路径
+        const response = await fetch('./vpn_data.json', {
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            cache: 'no-store'
+        });
+        
+        console.log('Response status:', response.status);
+        const text = await response.text();
+        console.log('Raw response:', text.substring(0, 200));
+        
+        const data = JSON.parse(text);
+        console.log('Parsed data:', data);
+        
+        if (!data || !Array.isArray(data.servers)) {
+            throw new Error('数据格式不正确');
+        }
+        
+        this.servers = data.servers;
+        console.log('Servers count:', this.servers.length);
+        
+        document.getElementById('totalServers').textContent = this.servers.length;
+        
+        if (data.timestamp) {
+            const updateTime = new Date(data.timestamp * 1000);
+            document.getElementById('updateTime').textContent = 
+                `更新时间: ${updateTime.toLocaleString()}`;
+        }
+        
+        this.filterServers();
+    } catch (error) {
+        console.error('Error loading data:', error);
+        alert('加载服务器列表失败：' + error.message);
+    } finally {
+        this.showLoading(false);
+    }
+}
 
             async testServer(ip, cardElement) {
                 const testResultElement = cardElement.querySelector('.test-result');
