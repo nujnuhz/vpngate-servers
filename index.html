@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VPN Gate 服务器列表 - 连接测试</title>
+    <title>VPN Gate 服务器列表</title>
     <style>
         * {
             box-sizing: border-box;
@@ -36,11 +36,42 @@
         .controls {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
+            margin: 20px 0;
             flex-wrap: wrap;
         }
 
-        .filter-input, .sort-select {
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            color: white;
+        }
+
+        .btn:disabled {
+            background: #cccccc !important;
+            cursor: not-allowed;
+        }
+
+        .test-all-btn {
+            background: #4CAF50;
+        }
+
+        .test-all-btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .show-tested-btn {
+            background: #2196F3;
+        }
+
+        .show-tested-btn:hover:not(:disabled) {
+            background: #1976D2;
+        }
+
+        .filter-input {
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -59,7 +90,6 @@
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            position: relative;
             transition: transform 0.2s;
         }
 
@@ -67,65 +97,39 @@
             transform: translateY(-2px);
         }
 
-        .server-card.recommended {
-            border: 2px solid #4CAF50;
-        }
-
-        .server-card.high-speed {
-            border: 2px solid #2196F3;
-        }
-
-        .server-card.low-ping {
-            border: 2px solid #FF9800;
-        }
-
-        .quality-badge {
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            color: white;
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
-
-        .quality-recommended {
-            background: #4CAF50;
-        }
-
-        .quality-high-speed {
-            background: #2196F3;
-        }
-
-        .quality-low-ping {
-            background: #FF9800;
+        .server-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .server-info {
-            margin: 15px 0;
+            font-size: 14px;
         }
 
         .server-info p {
             margin: 8px 0;
-            font-size: 14px;
             display: flex;
             justify-content: space-between;
         }
 
-        .btn {
+        .download-btn, .test-btn {
+            width: 100%;
+            padding: 10px;
             border: none;
-            padding: 10px 16px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            transition: all 0.3s;
-            width: 100%;
             margin-top: 10px;
+            color: white;
+            transition: background-color 0.3s;
         }
 
         .download-btn {
             background: #2196F3;
-            color: white;
         }
 
         .download-btn:hover {
@@ -134,37 +138,10 @@
 
         .test-btn {
             background: #4CAF50;
-            color: white;
         }
 
-        .test-btn:hover {
+        .test-btn:hover:not(:disabled) {
             background: #45a049;
-        }
-
-        .test-btn:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-        }
-
-        .stats {
-            background: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .criteria {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
         }
 
         .test-result {
@@ -173,6 +150,11 @@
             border-radius: 4px;
             font-size: 14px;
             text-align: center;
+        }
+
+        .test-pending {
+            background: #fff3e0;
+            color: #ef6c00;
         }
 
         .test-success {
@@ -185,9 +167,26 @@
             color: #c62828;
         }
 
-        .test-pending {
-            background: #fff3e0;
-            color: #ef6c00;
+        .stats {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .stats p {
+            margin: 5px 0;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            max-width: 300px;
+        }
+
+        .test-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
         }
 
         @media (max-width: 600px) {
@@ -195,7 +194,7 @@
                 flex-direction: column;
             }
 
-            .filter-input, .sort-select {
+            .btn, .filter-input {
                 width: 100%;
             }
         }
@@ -205,48 +204,22 @@
     <div class="container">
         <div class="header">
             <h1>VPN Gate 服务器列表</h1>
+            <div id="updateTime" class="status"></div>
         </div>
 
-        <div id="updateTime" class="status"></div>
-
-        <div class="criteria">
-            <h4>筛选标准</h4>
-            <ul>
-                <li>推荐节点：速度 >100Mbps，延迟 <50ms，评分 >100万，在线用户 >10，运行时间 >30天</li>
-                <li>高速节点：速度 >80Mbps</li>
-                <li>低延迟节点：延迟 <30ms</li>
-                <li>测试说明：仅测试 TCP 443 端口连通性，不代表 VPN 一定可用</li>
-            </ul>
-        </div>
-
-        <div class="stats" id="statsPanel">
+        <div class="stats">
             <h3>节点统计</h3>
-            <p>总节点数: <span id="totalServers">0</span></p>
-            <p>推荐节点: <span id="recommendedServers">0</span></p>
-            <p>高速节点: <span id="highSpeedServers">0</span></p>
-            <p>低延迟节点: <span id="lowPingServers">0</span></p>
-            <p>测试成功: <span id="testedServers">0</span></p>
+            <p>总节点数：<span id="totalServers">0</span></p>
+            <p>测试成功：<span id="successfulTests">0</span></p>
+            <p>成功率：<span id="successRate">0%</span></p>
         </div>
 
         <div class="controls">
-            <select id="filterQuality" class="sort-select">
-                <option value="all">显示所有节点</option>
-                <option value="tested">仅显示测试成功的节点</option>
-                <option value="recommended" selected>仅显示推荐节点</option>
-                <option value="highSpeed">仅显示高速节点</option>
-                <option value="lowPing">仅显示低延迟节点</option>
-            </select>
-            <input type="text" id="countryFilter" placeholder="按国家筛选" class="filter-input">
-            <select id="sortBy" class="sort-select">
-                <option value="quality">按综合评分排序</option>
-                <option value="speed">按速度排序</option>
-                <option value="ping">按延迟排序</option>
-                <option value="score">按得分排序</option>
-                <option value="uptime">按运行时间排序</option>
-            </select>
+            <button id="testAllBtn" class="btn test-all-btn">测试所有节点</button>
+            <button id="showTestedBtn" class="btn show-tested-btn">仅显示测试成功的节点</button>
+            <input type="text" id="countryFilter" class="filter-input" placeholder="按国家筛选">
         </div>
 
-        <div id="loading" class="loading" style="display: none;">加载中...</div>
         <div id="serverGrid" class="server-grid"></div>
     </div>
 
@@ -255,165 +228,134 @@
             constructor() {
                 this.servers = [];
                 this.testedServers = new Map();
+                this.showOnlyTested = false;
+                this.isTesting = false;
                 this.setupEventListeners();
                 this.loadData();
             }
 
             setupEventListeners() {
-                document.getElementById('filterQuality').addEventListener('change', () => this.filterAndSortServers());
-                document.getElementById('countryFilter').addEventListener('input', () => this.filterAndSortServers());
-                document.getElementById('sortBy').addEventListener('change', () => this.filterAndSortServers());
+                document.getElementById('testAllBtn').addEventListener('click', () => this.testAllServers());
+                document.getElementById('showTestedBtn').addEventListener('click', () => this.toggleTestedOnly());
+                document.getElementById('countryFilter').addEventListener('input', () => this.filterServers());
             }
 
-            showLoading(show) {
-                document.getElementById('loading').style.display = show ? 'block' : 'none';
-            }
-
-            calculateQualityScore(server) {
-                const speed = parseInt(server.speed) / (1024 * 1024);
-                const ping = parseInt(server.ping);
-                const sessions = parseInt(server.numVpnSessions);
-                const uptime = parseInt(server.uptime) / (24 * 3600);
-
-                let score = 0;
-                score += Math.min(40, speed / 100 * 40);
-                score += Math.min(30, (1 - ping / 100) * 30);
-                score += Math.min(20, sessions / 20 * 20);
-                score += Math.min(10, uptime / 30 * 10);
-
-                return score;
-            }
-
-            getServerQuality(server) {
-                const speed = parseInt(server.speed) / (1024 * 1024);
-                const ping = parseInt(server.ping);
-                const score = parseInt(server.score);
-                const sessions = parseInt(server.numVpnSessions);
-                const uptime = parseInt(server.uptime) / (24 * 3600);
-
-                if (speed > 100 && ping < 50 && score > 1000000 && sessions > 10 && uptime > 30) {
-                    return 'recommended';
-                } else if (speed > 80) {
-                    return 'high-speed';
-                } else if (ping < 30) {
-                    return 'low-ping';
+            async loadData() {
+                try {
+                    const response = await fetch('vpn_data.json');
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    
+                    this.servers = data.servers;
+                    document.getElementById('updateTime').textContent = 
+                        `更新时间: ${new Date(data.timestamp * 1000).toLocaleString()}`;
+                    document.getElementById('totalServers').textContent = this.servers.length;
+                    
+                    this.filterServers();
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    alert('加载服务器列表失败，请刷新页面重试');
                 }
-                return 'normal';
             }
 
             async testServer(ip, cardElement) {
-                if (this.testedServers.has(ip)) {
-                    return this.testedServers.get(ip);
-                }
-
                 const testResultElement = cardElement.querySelector('.test-result');
                 const testButton = cardElement.querySelector('.test-btn');
                 testButton.disabled = true;
                 testResultElement.textContent = '测试中...';
                 testResultElement.className = 'test-result test-pending';
 
+                const testUrls = [
+                    'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js'
+                ];
+
                 try {
                     const startTime = performance.now();
-                    const response = await Promise.race([
-                        fetch(`https://${ip}:443`, { mode: 'no-cors' }),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Timeout')), 5000)
-                        )
-                    ]);
+                    const testPromises = testUrls.map(url => 
+                        fetch(url, { 
+                            mode: 'no-cors',
+                            timeout: 5000
+                        })
+                    );
+
+                    await Promise.any(testPromises);
                     const endTime = performance.now();
-                    const result = {
+                    const latency = Math.round(endTime - startTime);
+
+                    this.testedServers.set(ip, {
                         status: 'success',
-                        latency: Math.round(endTime - startTime)
-                    };
-                    this.testedServers.set(ip, result);
-                    
-                    testResultElement.textContent = `测试成功! 延迟: ${result.latency}ms`;
+                        latency,
+                        testedAt: new Date().toISOString()
+                    });
+
+                    testResultElement.textContent = `连接成功! 延迟: ${latency}ms`;
                     testResultElement.className = 'test-result test-success';
-                    this.updateTestedCount();
-                    return result;
+                    testResultElement.innerHTML += `<div class="test-info">测试时间: ${new Date().toLocaleString()}</div>`;
+
+                    this.updateStats();
+                    if (this.showOnlyTested) this.filterServers();
                 } catch (error) {
-                    const result = {
+                    this.testedServers.set(ip, {
                         status: 'failed',
-                        error: error.message
-                    };
-                    this.testedServers.set(ip, result);
-                    
-                    testResultElement.textContent = '测试失败';
+                        error: error.message,
+                        testedAt: new Date().toISOString()
+                    });
+                    testResultElement.textContent = '连接失败';
                     testResultElement.className = 'test-result test-failed';
-                    return result;
+                    testResultElement.innerHTML += `<div class="test-info">测试时间: ${new Date().toLocaleString()}</div>`;
                 } finally {
                     testButton.disabled = false;
                 }
             }
 
-            updateTestedCount() {
-                const successfulTests = Array.from(this.testedServers.values())
-                    .filter(result => result.status === 'success').length;
-                document.getElementById('testedServers').textContent = successfulTests;
+            async testAllServers() {
+                if (this.isTesting) return;
+
+                this.isTesting = true;
+                const testAllBtn = document.getElementById('testAllBtn');
+                testAllBtn.disabled = true;
+                testAllBtn.textContent = '测试中...';
+
+                const cards = document.querySelectorAll('.server-card');
+                for (const card of cards) {
+                    if (this.isTesting) {
+                        const ip = card.getAttribute('data-ip');
+                        if (!this.testedServers.has(ip) || 
+                            this.testedServers.get(ip).status === 'failed') {
+                            await this.testServer(ip, card);
+                            // 添加小延迟避免请求过快
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+                }
+
+                this.isTesting = false;
+                testAllBtn.disabled = false;
+                testAllBtn.textContent = '测试所有节点';
             }
 
-            async loadData() {
-                try {
-                    this.showLoading(true);
-                    const response = await fetch('vpn_data.json');
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
-                    
-                    this.servers = data.servers.map(server => ({
-                        ...server,
-                        qualityScore: this.calculateQualityScore(server),
-                        quality: this.getServerQuality(server)
-                    }));
-                    
-                    const updateTime = new Date(data.timestamp * 1000);
-                    document.getElementById('updateTime').textContent = 
-                        `上次更新时间: ${updateTime.toLocaleString()}`;
-                    
-                    this.updateStats();
-                    this.filterAndSortServers();
-                } catch (error) {
-                    console.error('Error loading data:', error);
-                    alert('加载服务器数据失败，请刷新页面重试');
-                } finally {
-                    this.showLoading(false);
-                }
+            toggleTestedOnly() {
+                const btn = document.getElementById('showTestedBtn');
+                this.showOnlyTested = !this.showOnlyTested;
+                btn.textContent = this.showOnlyTested ? '显示所有节点' : '仅显示测试成功的节点';
+                this.filterServers();
             }
 
             updateStats() {
-                document.getElementById('totalServers').textContent = this.servers.length;
-                document.getElementById('recommendedServers').textContent = 
-                    this.servers.filter(s => s.quality === 'recommended').length;
-                document.getElementById('highSpeedServers').textContent = 
-                    this.servers.filter(s => s.quality === 'high-speed').length;
-                document.getElementById('lowPingServers').textContent = 
-                    this.servers.filter(s => s.quality === 'low-ping').length;
-                this.updateTestedCount();
+                const totalTested = this.testedServers.size;
+                const successfulTests = Array.from(this.testedServers.values())
+                    .filter(result => result.status === 'success').length;
+                
+                document.getElementById('successfulTests').textContent = successfulTests;
+                document.getElementById('successRate').textContent = 
+                    totalTested ? `${Math.round(successfulTests / totalTested * 100)}%` : '0%';
             }
 
-            filterAndSortServers() {
-                const qualityFilter = document.getElementById('filterQuality').value;
+            filterServers() {
                 const countryFilter = document.getElementById('countryFilter').value.toLowerCase();
-                const sortBy = document.getElementById('sortBy').value;
-
                 let filteredServers = this.servers;
-
-                if (qualityFilter !== 'all') {
-                    filteredServers = filteredServers.filter(server => {
-                        switch (qualityFilter) {
-                            case 'tested':
-                                return this.testedServers.has(server.ip) && 
-                                       this.testedServers.get(server.ip).status === 'success';
-                            case 'recommended':
-                                return server.quality === 'recommended';
-                            case 'highSpeed':
-                                return parseInt(server.speed) > 80 * 1024 * 1024;
-                            case 'lowPing':
-                                return parseInt(server.ping) < 30;
-                            default:
-                                return true;
-                        }
-                    });
-                }
 
                 if (countryFilter) {
                     filteredServers = filteredServers.filter(server => 
@@ -421,13 +363,71 @@
                     );
                 }
 
-                const sortFunctions = {
-                    quality: (a, b) => b.qualityScore - a.qualityScore,
-                    speed: (a, b) => parseInt(b.speed) - parseInt(a.speed),
-                    ping: (a, b) => parseInt(a.ping) - parseInt(b.ping),
-                    score: (a, b) => parseInt(b.score) - parseInt(a.score),
-                    uptime: (a, b) => parseInt(b.uptime) - parseInt(a.uptime)
-                };
+                if (this.showOnlyTested) {
+                    filteredServers = filteredServers.filter(server => 
+                        this.testedServers.has(server.ip) && 
+                        this.testedServers.get(server.ip).status === 'success'
+                    );
+                }
 
-                filteredServers.sort(sortFunctions[sortBy]);
-                this.displayServers(filteredSer
+                this.displayServers(filteredServers);
+            }
+
+            displayServers(servers) {
+                const grid = document.getElementById('serverGrid');
+                grid.innerHTML = '';
+
+                if (servers.length === 0) {
+                    grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">没有找到符合条件的节点</p>';
+                    return;
+                }
+
+                servers.forEach(server => {
+                    const speed = (parseInt(server.speed) / 1024 / 1024).toFixed(2);
+                    const card = document.createElement('div');
+                    card.className = 'server-card';
+                    card.setAttribute('data-ip', server.ip);
+
+                    const testResult = this.testedServers.get(server.ip);
+                    const testResultHtml = testResult ? `
+                        <div class="test-result ${testResult.status === 'success' ? 'test-success' : 'test-failed'}">
+                            ${testResult.status === 'success' ? 
+                                `连接成功! 延迟: ${testResult.latency}ms` : 
+                                '连接失败'}
+                            <div class="test-info">测试时间: ${new Date(testResult.testedAt).toLocaleString()}</div>
+                        </div>
+                    ` : '';
+
+                    card.innerHTML = `
+                        <h3>
+                            ${server.countryLong}
+                            <span style="color: ${testResult?.status === 'success' ? '#4CAF50' : '#666'}">
+                                ${server.ip}
+                            </span>
+                        </h3>
+                        <div class="server-info">
+                            <p>速度: ${speed} Mbps</p>
+                            <p>Ping: ${server.ping} ms</p>
+                            <p>在线用户: ${server.numVpnSessions}</p>
+                        </div>
+                        ${testResultHtml}
+                        <button class="test-btn" onclick="vpnUI.testServer('${server.ip}', this.parentElement)">
+                            测试连接
+                        </button>
+                        <button class="download-btn" onclick="vpnUI.downloadConfig('${server.ip}', '${encodeURIComponent(server.configData)}')">
+                            下载配置文件
+                        </button>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            downloadConfig(ip, configData) {
+                try {
+                    const decodedConfigData = decodeURIComponent(configData);
+                    const base64Content = decodedConfigData.replace(/[\r\n]/g, '');
+                    const config = atob(base64Content);
+                    
+                    const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
